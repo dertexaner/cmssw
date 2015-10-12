@@ -32,6 +32,15 @@ HBHEPulseShapeFlagSetter::HBHEPulseShapeFlagSetter()
 
    mMinimumChargeThreshold = 99999999;
    mTS4TS5ChargeThreshold = 99999999;
+
+   mOOTmpulseChargeThreshold = 99999999;
+   mOOTppulseChargeThreshold = 99999999;
+   mTS4TS5mpulseLowerBound =  0.8;
+   mTS4TS5mpulseUpperBound =  1.2;
+   mTS4TS5ppulseLowerBound = -1.2;
+   mTS4TS5ppulseUpperBound = -0.8;
+
+
 }
 //---------------------------------------------------------------------------
 HBHEPulseShapeFlagSetter::HBHEPulseShapeFlagSetter(double MinimumChargeThreshold,
@@ -52,7 +61,14 @@ HBHEPulseShapeFlagSetter::HBHEPulseShapeFlagSetter(double MinimumChargeThreshold
    const std::vector<double>& TS4TS5UpperThreshold,
    const std::vector<double>& TS4TS5UpperCut,
    bool UseDualFit, 
-   bool TriangleIgnoreSlow)
+   bool TriangleIgnoreSlow,
+   double OOTmpulseChargeThreshold,
+   double OOTppulseChargeThreshold,
+   double TS4TS5mpulseLowerBound,
+   double TS4TS5mpulseUpperBound,
+   double TS4TS5ppulseLowerBound,
+   double TS4TS5ppulseUpperBound
+)
 {
    //
    // The constructor that should be used
@@ -65,6 +81,13 @@ HBHEPulseShapeFlagSetter::HBHEPulseShapeFlagSetter(double MinimumChargeThreshold
    mTS4TS5ChargeThreshold = TS4TS5ChargeThreshold;
    mTrianglePeakTS = TrianglePeakTS;
    mTriangleIgnoreSlow = TriangleIgnoreSlow;
+
+   mOOTmpulseChargeThreshold = OOTmpulseChargeThreshold;
+   mOOTppulseChargeThreshold = OOTppulseChargeThreshold;
+   mTS4TS5mpulseLowerBound = TS4TS5mpulseLowerBound;
+   mTS4TS5mpulseUpperBound = TS4TS5mpulseUpperBound;
+   mTS4TS5ppulseLowerBound = TS4TS5ppulseLowerBound;
+   mTS4TS5ppulseUpperBound = TS4TS5ppulseUpperBound;
 
    for(std::vector<double>::size_type i = 0; i < LinearThreshold.size() && i < LinearCut.size(); i++)
       mLambdaLinearCut.push_back(std::pair<double, double>(LinearThreshold[i], LinearCut[i]));
@@ -195,11 +218,33 @@ void HBHEPulseShapeFlagSetter::SetPulseShapeFlags(HBHERecHit &hbhe,
 
    if(mCharge[4] + mCharge[5] > mTS4TS5ChargeThreshold && mTS4TS5ChargeThreshold>0) // silly protection against negative charge values
    {
+     //new parameters 
+     //OOTmpulseChargeThreshold
+     //OOTppulseChargeThreshold
+     //TS4TS5mpulseLowerBound
+     //TS4TS5mpulseUpperBound
+     //TS4TS5ppulseLowerBound
+     //TS4TS5ppulseUpperBound
+     //
       double TS4TS5 = (mCharge[4] - mCharge[5]) / (mCharge[4] + mCharge[5]);
-      if(CheckPassFilter(mCharge[4] + mCharge[5], TS4TS5, mTS4TS5UpperCut, 1) == false)
-         hbhe.setFlagField(1, HcalCaloFlagLabels::HBHETS4TS5Noise);
-      if(CheckPassFilter(mCharge[4] + mCharge[5], TS4TS5, mTS4TS5LowerCut, -1) == false)
-         hbhe.setFlagField(1, HcalCaloFlagLabels::HBHETS4TS5Noise);
+      double TS3TS4 = (mCharge[3] - mCharge[4]) / (mCharge[3] + mCharge[4]);
+      double TS5TS6 = (mCharge[5] - mCharge[6]) / (mCharge[5] + mCharge[6]);
+      bool isOOTmpulse = false;//check for the existence of a good OOT pulse in BX-1
+      bool isOOTppulse = false;//check for the existence of a good OOT pulse in BX+1
+      if( (mCharge[3] + mCharge[4]) > mOOTmpulseChargeThreshold                 &&//check if OOT(BX-1) pulse is large enough
+	  CheckPassFilter(mCharge[3] + mCharge[4], TS3TS4, mTS4TS5UpperCut, 1)  &&//check if OOT(BX-1) pulse has good pulse shape
+	  CheckPassFilter(mCharge[3] + mCharge[4], TS3TS4, mTS4TS5LowerCut, 1)  &&//check if OOT(BX-1) pulse has good pulse shape
+	  TS4TS5 > mTS4TS5mpulseLowerBound  &&  TS4TS5 < ,TS4TS5mpulseUpperBound )//check if in time pulse is consistent with an OOT(BX-1) pulse.
+	isOOTmpulse=true;
+      if( (mCharge[5] + mCharge[6]) > mOOTppulseChargeThreshold                 &&//check if OOT(BX+1) pulse is large enough
+	  CheckPassFilter(mCharge[5] + mCharge[6], TS5TS6, mTS4TS5UpperCut, 1)  &&//check if OOT(BX+1) pulse has good pulse shape
+	  CheckPassFilter(mCharge[5] + mCharge[6], TS5TS6, mTS4TS5LowerCut, 1)  &&//check if OOT(BX+1) pulse has good pulse shape
+	  TS4TS5 > mTS4TS5ppulseLowerBound  &&  TS4TS5 < mTS4TS5ppulseUpperBound )//check if in time pulse is consistent with an OOT(BX+1) pulse.
+	isOOTppulse=true;
+      if(CheckPassFilter(mCharge[4] + mCharge[5], TS4TS5, mTS4TS5UpperCut, 1) == false && isOOTmpulse == false && isOOTppulse == false)
+	hbhe.setFlagField(1, HcalCaloFlagLabels::HBHETS4TS5Noise);
+      if(CheckPassFilter(mCharge[4] + mCharge[5], TS4TS5, mTS4TS5LowerCut,-1) == false && isOOTmpulse == false && isOOTppulse == false)
+	hbhe.setFlagField(1, HcalCaloFlagLabels::HBHETS4TS5Noise);
    }
 }
 //---------------------------------------------------------------------------
